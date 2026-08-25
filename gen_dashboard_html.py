@@ -271,6 +271,8 @@ __PLOTLY_JS__
   #ai-result .ai-tag-q { background: #E3EDFF; color: #2B5CD9; }
   #ai-result .ai-tag-h { background: #EFE6FF; color: #7A3FD0; }
   #ai-result .ai-tag-c { background: #E0F4F0; color: #0E8A70; }
+  #ai-result .ai-tag-qq { background: #DCE9FF; color: #1B3F8F; }
+  #ai-result .ai-tag-z { background: #F0E7DB; color: #8A5A2B; }
   #ai-result .ai-text { font-size: 13px; color: #2B2F36; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
   #ai-result .ai-para { font-size: 13px; color: #2B2F36; line-height: 1.7; padding: 2px 2px; }
 </style>
@@ -886,17 +888,55 @@ function buildAIPrompt() {
   if (!hotCount) L.push("当前阈值下无异动记录。");
 
   L.push("");
-  L.push("===== 九、输出要求 =====");
-  L.push("请按行输出简洁口语化的持仓行为要点，直接说结论，参考风格：");
-  L.push("「【量化外资】外资继续加多菜油11月、菜油1月及豆粕01合约，对棕榈01合约由空转多。【宏观】宏观席位继续加多油粕。【重点产业】建发的华泰做了91反套，中拓的浙商席位在加仓菜粕11-1正套。」");
+  L.push("===== 九、量化席位专项数据（摩根大通/瑞银/高盛/东证/海通，各合约 最新收盘价(涨跌) | 总持仓量 | 最近3日净增减仓） =====");
+  const qSeats = SEAT_GROUPS["量化席位"] || [];
+  Object.keys(pool).sort().forEach(c => {
+    const seat0 = Object.keys(pool[c])[0];
+    if (!seat0) return;
+    const ser = pool[c][seat0];
+    const snapRow = snap.find(r => r.contract === c);
+    let totalOI = 0;
+    Object.keys(pool[c]).forEach(s => {
+      const sd = pool[c][s];
+      if (sd && sd.long && sd.long.length) totalOI += Number(sd.long[sd.long.length - 1]) + Number(sd.short[sd.short.length - 1]);
+    });
+    const n3 = Math.min(3, ser.dates.length);
+    const cellsQ = [];
+    qSeats.forEach(s => {
+      const sd = pool[c][s];
+      if (!sd || !sd.net_change) return;
+      cellsQ.push(s.replace("期货", "") + " 净增减 " + sd.net_change.slice(-n3).map(fmtSigned).join("/"));
+    });
+    L.push(`【${c}】收盘价 ${snapRow && snapRow.close != null ? snapRow.close : "-"}（${snapRow && snapRow.chg != null ? fmtSigned(snapRow.chg) : "-"}）| 总持仓 ${fmtN(totalOI)} 手 | ${cellsQ.join("；") || "无量化席位数据"}`);
+  });
+
+  L.push("");
+  L.push("===== 十、中粮期货专项数据（各合约：收盘价 | 净持仓 | 最近3日多头/空头增减仓） =====");
+  let zlCount = 0;
+  Object.keys(pool).sort().forEach(c => {
+    const ser = pool[c]["中粮期货"];
+    if (!ser) return;
+    const snapRow = snap.find(r => r.contract === c);
+    const n3 = Math.min(3, ser.dates.length);
+    L.push(`【${c}】收盘价 ${snapRow && snapRow.close != null ? snapRow.close : "-"} | 净持仓 ${fmtN(ser.net[ser.net.length - 1])} | 多头增减仓 ${ser.long_change.slice(-n3).map(fmtSigned).join("/")} | 空头增减仓 ${ser.short_change.slice(-n3).map(fmtSigned).join("/")}`);
+    zlCount++;
+  });
+  if (!zlCount) L.push("当前品种/数据源中无中粮期货持仓数据，中粮专项基于可得数据分析。");
+
+  L.push("");
+  L.push("===== 十一、输出要求 =====");
+  L.push("请按行输出结构化的持仓分析，直接说结论，口语化，参考风格：");
+  L.push("「【量化外资】量化整体偏多，外资继续加多菜油11月、菜油1月及豆粕01合约，摩根大通单日净增3,879手。【宏观】宏观整体偏多，国泰君安、中信同步加多1月合约。【重点产业】重点产业偏中性，中粮5月连续加空、1月小幅回补，与91反套结构匹配。【量化席位专项】量化席位在豆油1月集体加多，对应总持仓抬升、期价走强。【中粮期货专项】中粮在豆粕01合约空头回补、棕榈油5月加空，节奏偏防守。AI 分析仅为数据统计解读，不构成任何投资建议。」");
   L.push("要求：");
-  L.push("1. 每一行必须以【量化外资】【宏观】【重点产业】三个标签之一开头，标签后紧跟内容，每行 1-2 句口语化要点；");
-  L.push("2. 三组各输出 1-2 行，总行数不超过 6 行；");
-  L.push("3. 内容聚焦：多空动作、跨月套利行为、显著异动席位；");
-  L.push("4. 不要其它标签、不要标题、不要分节、不要长篇展开、不要罗列数据明细；");
-  L.push("5. 纯文本输出，禁止任何 Markdown 标记（如 #、**、*、-、` 等）；");
-  L.push("6. 最后单独输出一行风险提示：「AI 分析仅为数据统计解读，不构成任何投资建议」（此行不带标签）；");
-  L.push("7. 全文 100-200 字左右，数据引用准确（手数带千分位），不得编造数据源中不存在的数字。");
+  L.push("1. 每一行必须以【量化外资】【宏观】【重点产业】【量化席位专项】【中粮期货专项】五个标签之一开头，标签后紧跟内容；");
+  L.push("2. 【量化外资】【宏观】【重点产业】每组先给整体多空倾向判断（如「量化整体偏多」），再给 1-2 句关键席位动作与显著异动（大额增/减仓席位及手数）；");
+  L.push("3. 结合跨月正/反套信号（见第五节），说明席位持仓行为与跨月套利结构的匹配情况，可放在【重点产业】或专项中；");
+  L.push("4. 【量化席位专项】1-3 句：联动各合约价格、总持仓量与量化席位连续增减仓，阐述价格变动与调仓的对应关系；");
+  L.push("5. 【中粮期货专项】1-3 句：聚焦豆粕、棕榈油两品种，分析中粮各合约持仓与增减仓节奏，结合盘面价格解读产业端行为特征；");
+  L.push("6. 每个标签输出 1-2 行，全文约 300-400 字；");
+  L.push("7. 除上述 5 个标签外，不要输出任何其它标签、标题或分节；纯文本，禁止任何 Markdown 标记（如 #、**、*、-、` 等）；");
+  L.push("8. 最后单独输出一行风险提示：「AI 分析仅为数据统计解读，不构成任何投资建议」（此行不带标签）；");
+  L.push("9. 数据引用准确（手数带千分位），数据源缺失某项时基于可得数据分析，不得编造数据源中不存在的数字。");
   return L.join("\\n");
 }
 
@@ -921,8 +961,8 @@ function renderAIResult(text) {
   const clean = stripMarkdown(raw);
   const lines = clean.split("\\n").map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
   if (!lines.length) return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
-  const groupRe = /^【(量化外资|宏观|重点产业)】/;
-  const tagCls = { "量化外资": "q", "宏观": "h", "重点产业": "c" };
+  const groupRe = /^【(量化外资|宏观|重点产业|量化席位专项|中粮期货专项)】/;
+  const tagCls = { "量化外资": "q", "宏观": "h", "重点产业": "c", "量化席位专项": "qq", "中粮期货专项": "z" };
   let cards = "", extras = "";
   let recognized = 0;
   lines.forEach(function (line) {
