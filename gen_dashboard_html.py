@@ -264,6 +264,15 @@ __PLOTLY_JS__
   #ai-result .ai-loading { color: #666; font-size: 13px; padding: 14px 12px; border: 1px dashed #C5CBD3; border-radius: 6px; background: #FAFBFC; }
   #ai-result .ai-error { color: #C62828; font-size: 13px; padding: 12px; border: 1px solid #FFCDD2; border-radius: 6px; background: #FFEBEE; white-space: pre-wrap; }
   #ai-result .ai-body { font-size: 13px; line-height: 1.7; padding: 14px 16px; border: 1px solid #E3E7EC; border-radius: 6px; background: #FBFCFE; white-space: pre-wrap; word-break: break-word; }
+  /* 分组卡片式展示 */
+  #ai-result .ai-cards { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #F2F6FF; border: 1px solid #D8E4F8; border-radius: 12px; }
+  #ai-result .ai-card { background: #FFFFFF; border: 1px solid #E4EBFA; border-radius: 10px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(40, 70, 140, 0.06); }
+  #ai-result .ai-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; margin-bottom: 6px; }
+  #ai-result .ai-tag-q { background: #E3EDFF; color: #2B5CD9; }
+  #ai-result .ai-tag-h { background: #EFE6FF; color: #7A3FD0; }
+  #ai-result .ai-tag-c { background: #E0F4F0; color: #0E8A70; }
+  #ai-result .ai-text { font-size: 13px; color: #2B2F36; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+  #ai-result .ai-para { font-size: 13px; color: #2B2F36; line-height: 1.7; padding: 2px 2px; }
 </style>
 </head>
 <body>
@@ -878,14 +887,16 @@ function buildAIPrompt() {
 
   L.push("");
   L.push("===== 九、输出要求 =====");
-  L.push("请以几句简洁口语化的持仓行为要点输出（像朋友间聊天一样直接说结论），参考风格：");
-  L.push("「单边行情外资继续加多菜油11月、菜油1月以及豆粕01合约，对棕榈01合约的做空逐步平仓转为做多；宏观席位继续加多油粕；产业席位上建发的华泰做了91反套，中拓的浙商席位在加仓菜粕11-1正套。」");
+  L.push("请按行输出简洁口语化的持仓行为要点，直接说结论，参考风格：");
+  L.push("「【量化外资】外资继续加多菜油11月、菜油1月及豆粕01合约，对棕榈01合约由空转多。【宏观】宏观席位继续加多油粕。【重点产业】建发的华泰做了91反套，中拓的浙商席位在加仓菜粕11-1正套。」");
   L.push("要求：");
-  L.push("1. 按量化外资/宏观/重点产业三组席位各1-2句，概括多空动作与跨月套利行为，指出显著异动席位；");
-  L.push("2. 不要大标题、不要分节小标题、不要长篇展开、不要罗列数据明细；");
-  L.push("3. 纯文本输出，不要任何 Markdown 标记（如 #、**、*、-、` 等）；");
-  L.push("4. 末尾固定输出一句：「AI 分析仅为数据统计解读，不构成任何投资建议」；");
-  L.push("5. 全文 100-200 字左右，数据引用准确（手数带千分位），不得编造数据源中不存在的数字。");
+  L.push("1. 每一行必须以【量化外资】【宏观】【重点产业】三个标签之一开头，标签后紧跟内容，每行 1-2 句口语化要点；");
+  L.push("2. 三组各输出 1-2 行，总行数不超过 6 行；");
+  L.push("3. 内容聚焦：多空动作、跨月套利行为、显著异动席位；");
+  L.push("4. 不要其它标签、不要标题、不要分节、不要长篇展开、不要罗列数据明细；");
+  L.push("5. 纯文本输出，禁止任何 Markdown 标记（如 #、**、*、-、` 等）；");
+  L.push("6. 最后单独输出一行风险提示：「AI 分析仅为数据统计解读，不构成任何投资建议」（此行不带标签）；");
+  L.push("7. 全文 100-200 字左右，数据引用准确（手数带千分位），不得编造数据源中不存在的数字。");
   return L.join("\\n");
 }
 
@@ -901,6 +912,32 @@ function stripMarkdown(text) {
     .replace(/^\\s*>\\s?/gm, "")                  // 行首引用 >
     .replace(/[\\t ]+$/gm, "")                    // 行尾空白
     .replace(/\\n{3,}/g, "\\n\\n");               // 压缩多余空行
+}
+
+function renderAIResult(text) {
+  // 将 AI 返回文本按行解析为分组卡片：行首【量化外资】【宏观】【重点产业】→ 卡片；其余行 → 普通段落
+  const raw = String(text || "").trim();
+  if (!raw) return '<div class="ai-body"></div>';
+  const clean = stripMarkdown(raw);
+  const lines = clean.split("\\n").map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+  if (!lines.length) return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
+  const groupRe = /^【(量化外资|宏观|重点产业)】/;
+  const tagCls = { "量化外资": "q", "宏观": "h", "重点产业": "c" };
+  let cards = "", extras = "";
+  let recognized = 0;
+  lines.forEach(function (line) {
+    const m = line.match(groupRe);
+    if (m) {
+      recognized++;
+      const g = m[1], body = line.slice(m[0].length).trim();
+      cards += '<div class="ai-card"><span class="ai-tag ai-tag-' + (tagCls[g] || "x") + '">' + g + '</span><div class="ai-text">' + escapeHtml(body) + "</div></div>";
+    } else {
+      extras += '<div class="ai-para">' + escapeHtml(line) + "</div>";
+    }
+  });
+  if (recognized > 0) return '<div class="ai-cards">' + cards + extras + "</div>";
+  // 未识别到任何组标签：降级为原文整段显示
+  return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
 }
 
 async function runAIAnalysis() {
@@ -928,7 +965,7 @@ async function runAIAnalysis() {
     const content = data && data.content;
     if (!content) throw new Error("响应中未包含分析内容");
     const clean = stripMarkdown(content);
-    out.innerHTML = '<div class="ai-body">' + escapeHtml(clean) + "</div>";
+    out.innerHTML = renderAIResult(clean);
   } catch (err) {
     const timedOut = err && err.name === "AbortError";
     out.innerHTML = '<div class="ai-error">' + (timedOut
