@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+
+# 本地临时产物
+temp/
+_err.log
+_err.txt
+_made.txt
+_run.log
+
+# 备份/旧版本文件（不参与部署）
+*.bak
+*.new
+
+# 敏感凭据（严禁上传 GitHub）
+.env
+.env.*
+*.key
+api_key*.txt
+*.secret

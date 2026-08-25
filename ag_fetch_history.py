@@ -45,10 +45,13 @@ VARIETIES = {
     "菜油":   {"code": "OI", "market": "115"},
     "菜粕":   {"code": "RM", "market": "115"},
 }
-SEATS = ["摩根大通期货", "乾坤期货", "瑞银期货", "中粮期货",
-         "永安期货", "中信期货", "国泰君安期货", "一德期货", "高盛期货"]
-MAIN_MONTHS = [1, 5, 9]
-EXTRA_MONTHS = {"豆粕": [3, 11]}
+SEAT_GROUPS = {
+    "量化席位": ["摩根大通期货", "瑞银期货", "高盛期货", "东证期货", "海通期货"],
+    "宏观席位": ["中信期货", "国泰君安期货"],
+    "重点产业席位": ["中粮期货", "华泰期货", "国投安信期货", "瑞达期货", "五矿期货", "广发期货", "一德期货"],
+}
+SEATS = [seat for group in SEAT_GROUPS.values() for seat in group]
+ALL_MONTHS = [1, 3, 5, 7, 9, 11]
 
 CSV_COLUMNS = ["日期", "品种", "合约", "合约月份", "席位", "多头持仓", "空头持仓",
                "净持仓", "净持仓方向", "多头增减仓", "空头增减仓"]
@@ -265,7 +268,7 @@ def main():
     today = datetime.datetime.strptime(trade_dates[-1], "%Y%m%d").date()
     total_new = 0
     for variety_name, cfg in VARIETIES.items():
-        months = sorted(set(MAIN_MONTHS + EXTRA_MONTHS.get(variety_name, [])))
+        months = ALL_MONTHS[:]
         contracts = fixed_contracts(cfg["code"], cfg["market"], months, today)
         for date_str in trade_dates:
             for contract, label in contracts:
@@ -279,7 +282,7 @@ def main():
     # ---- 价格抓取 ----
     price_recs = []
     for variety_name, cfg in VARIETIES.items():
-        months = sorted(set(MAIN_MONTHS + EXTRA_MONTHS.get(variety_name, [])))
+        months = ALL_MONTHS[:]
         contracts = fixed_contracts(cfg["code"], cfg["market"], months, today)
         for contract, label in contracts:
             price_recs.extend(fetch_prices(variety_name, cfg, contract, label,

@@ -20,18 +20,33 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(ROOT_DIR, "data")
 
 VARIETY_ORDER = ["豆油", "棕榈油", "菜油", "菜粕", "豆粕"]
-SEATS = ["中粮期货", "摩根大通期货", "乾坤期货", "瑞银期货",
-         "永安期货", "中信期货", "国泰君安期货", "一德期货", "高盛期货"]
+SEAT_GROUPS = {
+    "量化席位": ["摩根大通期货", "瑞银期货", "高盛期货", "东证期货", "海通期货"],
+    "宏观席位": ["中信期货", "国泰君安期货"],
+    "重点产业席位": ["中粮期货", "华泰期货", "国投安信期货", "瑞达期货", "五矿期货", "广发期货", "一德期货"],
+}
+SEATS = [seat for group in SEAT_GROUPS.values() for seat in group]
+
+# ---- DeepSeek API 配置（需求5：AI 持仓简要分析，经后端 app.py 代理转发）----
+# 注意：API key 已从前端/本脚本移除，改为由后端服务从环境变量 DEEPSEEK_API_KEY 读取
+DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEEPSEEK_TIMEOUT_MS = 60000  # 接口超时兜底（毫秒）
+
 SEAT_COLORS = {
-    "中粮期货": "#1E88E5",
     "摩根大通期货": "#E53935",
-    "乾坤期货": "#43A047",
     "瑞银期货": "#FDD835",
-    "永安期货": "#8E24AA",
-    "中信期货": "#FB8C00",
-    "国泰君安期货": "#00ACC1",
-    "一德期货": "#6D4C41",
     "高盛期货": "#C0CA33",
+    "东证期货": "#8E24AA",
+    "海通期货": "#00ACC1",
+    "中信期货": "#FB8C00",
+    "国泰君安期货": "#1E88E5",
+    "中粮期货": "#43A047",
+    "华泰期货": "#5E35B1",
+    "国投安信期货": "#6D4C41",
+    "瑞达期货": "#D81B60",
+    "五矿期货": "#3949AB",
+    "广发期货": "#00897B",
+    "一德期货": "#F4511E",
 }
 
 
@@ -205,6 +220,50 @@ __PLOTLY_JS__
   #summary td.hot-up { background: #FFECB3; }
   #summary td.hot-down { background: #FFCDD2; }
   .hint { color: #999; font-size: 12px; margin-top: 6px; }
+  .seat-field { position: relative; }
+  .seat-panel { display: none; position: absolute; top: 100%; left: 0; z-index: 300;
+                width: 320px; max-height: 380px; overflow: auto; background: #fff;
+                border: 1px solid #C5CBD3; border-radius: 6px; padding: 8px 10px;
+                box-shadow: 0 4px 12px rgba(0,0,0,.12); font-size: 13px; }
+  .seat-panel.open { display: block; }
+  .seat-group-box { border-top: 1px solid #EEF2F7; padding: 6px 2px; }
+  .seat-group-box:first-child { border-top: none; }
+  .seat-group-box label.grp { display: block; font-weight: bold; color: #1E88E5; margin-bottom: 3px; }
+  .seat-group-box label.item { display: block; font-weight: normal; padding: 2px 0 2px 18px; }
+  .seat-group-box label.item input { margin-right: 4px; }
+  #drawer-seat-panel { position: static; width: 100%; box-shadow: none; max-height: 260px; }
+  #tables-area h4.sub { margin-top: 26px; }
+  #tables-area table.summary { width: 100%; border-collapse: collapse; border: 1px solid #E3E7EC; font-size: 13px; margin-bottom: 18px; }
+  #tables-area table.summary th { background: #EEF2F7; font-weight: bold; padding: 8px 12px; text-align: center; border-bottom: 1px solid #E3E7EC; }
+  #tables-area table.summary td { padding: 8px 12px; text-align: right; border-bottom: 1px solid #F0F0F0; cursor: pointer; }
+  #tables-area table.summary td:first-child { text-align: left; font-weight: bold; }
+  #tables-area table.summary tr.active { background: #FFF9C4; }
+  #tables-area table.summary tr:hover { background: #F5F9FF; }
+  #tables-area table.summary td.up { color: #E53935; }
+  #tables-area table.summary td.down { color: #43A047; }
+  #tables-area table.summary td.hot-up { background: #FFECB3; }
+  #tables-area table.summary td.hot-down { background: #FFCDD2; }
+  #tables-area table.summary tr.total-row td { background: #F7FAFF; font-weight: bold; border-top: 2px solid #C5CBD3; }
+  .arbitrage-block { margin-top: 26px; border-top: 2px solid #E3E7EC; padding-top: 10px; }
+  .arbitrage-block h3 { margin: 8px 0 12px; font-size: 16px; color: #222; }
+  /* 套利板块：与上方汇总表同构，整表淡绿色背景区分 */
+  #arbitrage-area table.summary { width: 100%; border-collapse: collapse; border: 1px solid #A5D6A7; font-size: 13px; margin-bottom: 18px; background: #E8F5E9; }
+  #arbitrage-area table.summary th { background: #C8E6C9; font-weight: bold; padding: 8px 12px; text-align: center; border-bottom: 1px solid #A5D6A7; }
+  #arbitrage-area table.summary td { padding: 8px 12px; text-align: right; border-bottom: 1px solid #C8E6C9; cursor: default; }
+  #arbitrage-area table.summary td:first-child { text-align: left; font-weight: bold; }
+  #arbitrage-area table.summary td.up { color: #E53935; }
+  #arbitrage-area table.summary td.down { color: #43A047; }
+  #arbitrage-area .c-code { font-size: 11px; color: #888; }
+  .arbitrage-block .hint { margin-top: 12px; }
+  /* 需求5：AI 持仓简要分析板块 */
+  .ai-block { margin-top: 26px; border-top: 2px solid #E3E7EC; padding-top: 10px; }
+  .ai-block h3 { margin: 8px 0 12px; font-size: 16px; color: #222; }
+  .ai-block .ai-head { display: flex; align-items: center; gap: 12px; margin: 10px 0 12px; }
+  .ai-block .ai-risk { color: #C62828; font-weight: bold; margin-top: 10px; }
+  #ai-result { margin-top: 4px; }
+  #ai-result .ai-loading { color: #666; font-size: 13px; padding: 14px 12px; border: 1px dashed #C5CBD3; border-radius: 6px; background: #FAFBFC; }
+  #ai-result .ai-error { color: #C62828; font-size: 13px; padding: 12px; border: 1px solid #FFCDD2; border-radius: 6px; background: #FFEBEE; white-space: pre-wrap; }
+  #ai-result .ai-body { font-size: 13px; line-height: 1.7; padding: 14px 16px; border: 1px solid #E3E7EC; border-radius: 6px; background: #FBFCFE; white-space: pre-wrap; word-break: break-word; }
 </style>
 </head>
 <body>
@@ -215,7 +274,8 @@ __PLOTLY_JS__
     <label>品种</label>
     <select id="drawer-variety"></select>
     <label>席位</label>
-    <select id="drawer-seat"></select>
+    <button class="btn" id="drawer-seat-toggle" style="width:100%">选择席位（全部）</button>
+    <div class="seat-panel" id="drawer-seat-panel"></div>
     <label>快捷周期</label>
     <div class="btn-group">
       <button class="btn" data-range="30">30日</button>
@@ -236,7 +296,10 @@ __PLOTLY_JS__
   <div class="topbar">
     <div class="field"><label>品种</label><select id="variety"></select></div>
     <div class="field"><label>合约</label><select id="contract"></select></div>
-    <div class="field"><label>席位</label><select id="seat" class="seat-sel"></select></div>
+    <div class="field seat-field"><label>席位</label>
+      <button class="btn" id="seat-toggle">选择席位（全部）</button>
+      <div class="seat-panel" id="seat-panel"></div>
+    </div>
     <div class="field"><label>快捷周期</label>
       <div style="display:flex;gap:6px">
         <button class="btn" data-range="30">30日</button>
@@ -266,8 +329,24 @@ __PLOTLY_JS__
   <div id="chart-main"></div>
   <div id="tiles"></div>
 
-  <h4 class="sub">最新交易日汇总（点击行切换合约）</h4>
-  <table id="summary"></table>
+  <div id="tables-area"></div>
+
+  <div class="arbitrage-block">
+    <h3>席位跨月套利（正套 / 反套）行为识别</h3>
+    <div id="arbitrage-area"></div>
+    <div class="hint">信号基于当日收盘净持仓计算；套利规模取配对方向两手数较小值；仅为统计推演，席位真实动机无法确认；仅计算 15、59、91 三组主力合约配对；仅供数据研究，不构成投资建议。</div>
+  </div>
+
+  <div class="ai-block">
+    <h3>AI 持仓简要分析</h3>
+    <div class="ai-head">
+      <button class="btn primary" id="ai-run">生成 AI 分析</button>
+      <span class="hint" style="margin:0">基于当前筛选状态（品种 / 合约 / 席位 / 周期 / 异动阈值）调用 DeepSeek 生成。</span>
+    </div>
+    <div id="ai-result"></div>
+    <div class="hint ai-risk">AI 分析仅为数据统计解读，不构成任何投资建议</div>
+  </div>
+
   <div class="hint">数据更新日期：<span id="data-date"></span> · 更新数据后请重新运行 gen_dashboard_html.py 再刷新页面 · 图表支持框选放大 / 拖拽平移 / 右上角相机导出 PNG</div>
 </div>
 
@@ -297,13 +376,15 @@ __PLOTLY_JS__
 const DATA = __DATA_JSON__;
 const VARIETY_ORDER = __VARIETY_ORDER__;
 const SEATS = __SEATS__;
+const SEAT_GROUPS = __SEAT_GROUPS__;
 const SEAT_COLORS = __SEAT_COLORS__;
-const MAX_TILES = 9;
+const DEEPSEEK_CONFIG = __DEEPSEEK_CONFIG__;
+const MAX_TILES = 14;
 
 const state = {
   variety: VARIETY_ORDER[0],
   contract: null,
-  seat: SEATS[0],
+  seats: ["中粮期货"],
   range: 90,
   mode: "A",
   showMA: false,
@@ -318,8 +399,23 @@ function initSelects() {
   const vSel = $("variety"), dvSel = $("drawer-variety");
   vSel.innerHTML = VARIETY_ORDER.map(v => `<option value="${v}">${v}</option>`).join("");
   dvSel.innerHTML = vSel.innerHTML;
-  $("seat").innerHTML = SEATS.map(s => `<option value="${s}">${s}</option>`).join("");
-  $("drawer-seat").innerHTML = $("seat").innerHTML;
+  renderSeatPanel();
+}
+
+function renderSeatPanel() {
+  const html = Object.keys(SEAT_GROUPS).map(g => {
+    const items = SEAT_GROUPS[g].map(s => {
+      const checked = state.seats.includes(s);
+      return `<label class="item"><input type="checkbox" class="seat-item" value="${s}" ${checked ? "checked" : ""}>${s}</label>`;
+    }).join("");
+    const allChecked = SEAT_GROUPS[g].every(s => state.seats.includes(s));
+    return `<div class="seat-group-box"><label class="grp"><input type="checkbox" class="seat-group" data-group="${g}" ${allChecked ? "checked" : ""}>${g}</label>${items}</div>`;
+  }).join("");
+  $("seat-panel").innerHTML = html;
+  $("drawer-seat-panel").innerHTML = html;
+  const n = state.seats.length;
+  $("seat-toggle").textContent = "选择席位（" + n + "）";
+  $("drawer-seat-toggle").textContent = "选择席位（" + n + "）";
 }
 
 function syncContractOptions() {
@@ -342,11 +438,11 @@ function sliceSeries(ser) {
   };
 }
 
-function buildFig(v, c, s) {
-  const ser = DATA.data[v][c][s];
-  if (!ser) return null;
-  const sl = sliceSeries(ser);
-  const color = SEAT_COLORS[s];
+function buildFig(v, c, seats) {
+  const firstSer = DATA.data[v][c][seats[0]];
+  if (!firstSer) return null;
+  const sl = sliceSeries(firstSer);
+  const multi = seats.length > 1;
   const traces = [
     {
       x: sl.dates, y: sl.close, type: "scatter", mode: "lines", name: "收盘价",
@@ -355,37 +451,46 @@ function buildFig(v, c, s) {
       hovertemplate: "日期 %{x}<br>收盘价 %{y:.1f}<br>多头增减仓 %{customdata[4]:+,.0f}<br>空头增减仓 %{customdata[5]:+,.0f}<extra></extra>",
       yaxis: "y",
     },
-    {
-      x: sl.dates, y: sl.net, type: "scatter", mode: "lines", name: s + "净持仓",
-      line: { color: color, width: 2.2 }, yaxis: "y2",
-    },
-    {
-      x: sl.dates, y: sl.net_change, type: "bar", name: "净增减仓",
-      marker: { color: "#90CAF9" }, yaxis: "y2",
-    },
   ];
-  if (state.showMA) {
-    traces.push({ x: sl.dates, y: sl.long, type: "scatter", mode: "lines", name: "多头持仓",
-                  line: { color: "#E53935", width: 1.4, dash: "dot" }, yaxis: "y2" });
-    traces.push({ x: sl.dates, y: sl.short, type: "scatter", mode: "lines", name: "空头持仓",
-                  line: { color: "#43A047", width: 1.4, dash: "dot" }, yaxis: "y2" });
-  }
-  if (state.threshold > 0) {
-    const idxs = [];
-    sl.net_change.forEach((nc, i) => { if (Math.abs(nc) >= state.threshold) idxs.push(i); });
-    if (idxs.length) {
+  seats.forEach(s => {
+    const sd = DATA.data[v][c][s];
+    if (!sd) return;
+    const ssl = sliceSeries(sd);
+    const color = SEAT_COLORS[s] || "#888";
+    traces.push({
+      x: ssl.dates, y: ssl.net, type: "scatter", mode: "lines", name: s + "净持仓",
+      line: { color: color, width: multi ? 1.6 : 2.2 }, yaxis: "y2",
+    });
+    if (!multi) {
       traces.push({
-        x: idxs.map(i => sl.dates[i]), y: idxs.map(i => sl.net[i]), type: "scatter", mode: "markers",
-        name: "异动(≥" + state.threshold.toLocaleString() + ")",
-        customdata: idxs.map(i => sl.net_change[i]),
-        marker: { symbol: idxs.map(i => sl.net_change[i] > 0 ? "triangle-up" : "triangle-down"),
-                  size: 10, color: "#FF7043", line: { color: "#fff", width: 1 } },
-        hovertemplate: "异动 净增减仓 %{customdata:+,.0f}<extra></extra>", yaxis: "y2",
+        x: ssl.dates, y: ssl.net_change, type: "bar", name: "净增减仓",
+        marker: { color: "#90CAF9" }, yaxis: "y2",
       });
+      if (state.showMA) {
+        traces.push({ x: ssl.dates, y: ssl.long, type: "scatter", mode: "lines", name: "多头持仓",
+                      line: { color: "#E53935", width: 1.4, dash: "dot" }, yaxis: "y2" });
+        traces.push({ x: ssl.dates, y: ssl.short, type: "scatter", mode: "lines", name: "空头持仓",
+                      line: { color: "#43A047", width: 1.4, dash: "dot" }, yaxis: "y2" });
+      }
     }
-  }
+    if (state.threshold > 0) {
+      const idxs = [];
+      ssl.net_change.forEach((nc, i) => { if (Math.abs(nc) >= state.threshold) idxs.push(i); });
+      if (idxs.length) {
+        traces.push({
+          x: idxs.map(i => ssl.dates[i]), y: idxs.map(i => ssl.net[i]), type: "scatter", mode: "markers",
+          name: multi ? (s + "异动") : ("异动(≥" + state.threshold.toLocaleString() + ")"),
+          customdata: idxs.map(i => ssl.net_change[i]),
+          marker: { symbol: idxs.map(i => ssl.net_change[i] > 0 ? "triangle-up" : "triangle-down"),
+                    size: multi ? 9 : 10, color: multi ? color : "#FF7043", line: { color: "#fff", width: multi ? 0.8 : 1 } },
+          hovertemplate: (multi ? s + " 异动" : "异动") + " 净增减仓 %{customdata:+,.0f}<extra></extra>", yaxis: "y2",
+        });
+      }
+    }
+  });
+  const seatLabel = multi ? (seats.length + "个席位") : seats[0];
   const layout = {
-    title: { text: "【" + s + "】-【" + v + "：" + c + "】- 席位持仓走势", font: { size: 15, color: "#222" } },
+    title: { text: "【" + v + "：" + c + "】- " + seatLabel + " 持仓走势", font: { size: 15, color: "#222" } },
     paper_bgcolor: "#FFFFFF", plot_bgcolor: "#FFFFFF", height: 560,
     margin: { l: 75, r: 85, t: 100, b: 45 }, hovermode: "x unified",
     legend: { orientation: "h", y: 1.02, x: 0, font: { size: 11 } },
@@ -405,14 +510,15 @@ const PLOT_CFG = { responsive: true, displaylogo: false,
 
 function renderTitle() {
   let t;
-  if (state.mode === "B") t = "【" + state.seat + "】-【" + state.variety + "】多合约平铺";
+  const seatLabel = state.seats.length > 3 ? (state.seats.length + "个席位") : state.seats.join("/");
+  if (state.mode === "B") t = "【" + state.variety + "】- " + seatLabel + " 多合约平铺";
   else if (state.mode === "C") t = "【" + state.variety + "：" + state.contract + "】- 同合约多席位平铺";
-  else t = "【" + state.seat + "】-【" + state.variety + "：" + state.contract + "】- 席位持仓走势";
+  else t = "【" + state.variety + "：" + state.contract + "】- " + seatLabel + " 持仓走势";
   $("title-bar").textContent = t + "　·　数据更新至 " + DATA.update_date;
 }
 
 function renderMain() {
-  const fig = buildFig(state.variety, state.contract, state.seat);
+  const fig = buildFig(state.variety, state.contract, state.seats);
   $("chart-main").style.display = "block";
   $("tiles").style.display = "none";
   if (fig) Plotly.react("chart-main", fig.data, fig.layout, PLOT_CFG);
@@ -426,13 +532,13 @@ function renderTiles() {
   let list;
   if (state.mode === "C") {
     const ser = DATA.data[state.variety][state.contract] || {};
-    list = SEATS.filter(s => ser[s]);
+    list = state.seats.filter(s => ser[s]);
   } else {
     list = contractsOf(state.variety);
   }
   list.forEach((item, i) => {
-    const fig = state.mode === "C" ? buildFig(state.variety, state.contract, item)
-                                   : buildFig(state.variety, item, state.seat);
+    const fig = state.mode === "C" ? buildFig(state.variety, state.contract, [item])
+                                   : buildFig(state.variety, item, state.seats);
     if (!fig) return;
     const div = document.createElement("div");
     div.className = "tile";
@@ -441,8 +547,8 @@ function renderTiles() {
     Plotly.newPlot(div.id, fig.data, fig.layout, PLOT_CFG);
     div.on("plotly_click", function () {
       if (state.mode === "C") {
-        state.seat = item;
-        $("seat").value = item;
+        state.seats = [item];
+        renderSeatPanel();
       } else {
         state.contract = item;
         $("contract").value = item;
@@ -454,34 +560,53 @@ function renderTiles() {
   });
 }
 
-function renderTable() {
+function renderTables() {
+  $("data-date").textContent = DATA.update_date;
   const rows = DATA.snapshot[state.variety] || [];
-  const table = $("summary");
-  const head = "<tr><th>合约代码</th><th>收盘价</th><th>涨跌</th>" +
-    SEATS.map(s => `<th>${s.replace("期货", "")}净持仓</th>`).join("") + "</tr>";
-  const body = rows.map(r => {
-    let chgCls = "", chgTxt = "-";
-    if (r.chg !== null && r.chg !== undefined) {
-      chgTxt = (r.chg > 0 ? "+" : "") + r.chg.toFixed(0);
-      chgCls = r.chg > 0 ? "up" : (r.chg < 0 ? "down" : "");
-    }
-    const tds = [`<td>${r.contract}</td>`, `<td>${r.close === null ? "-" : r.close.toFixed(0)}</td>`,
-                 `<td class="${chgCls}">${chgTxt}</td>`];
-    SEATS.forEach(s => {
-      const nc = r[s + "_chg"];
-      let cls = "";
-      if (state.threshold > 0 && nc !== null && nc !== undefined) {
-        if (nc >= state.threshold) cls = "hot-up";
-        else if (nc <= -state.threshold) cls = "hot-down";
+  const area = $("tables-area");
+  let html = "";
+  Object.keys(SEAT_GROUPS).forEach(g => {
+    const seats = SEAT_GROUPS[g];
+    html += `<h4 class="sub">${g}交易日汇总</h4>`;
+    html += `<table class="summary" data-group="${g}"><thead><tr><th>合约代码</th><th>收盘价</th><th>涨跌</th>` +
+            seats.map(s => `<th>${s.replace("期货", "")}净持仓</th>`).join("") +
+            `</tr></thead><tbody>`;
+    rows.forEach(r => {
+      let chgCls = "", chgTxt = "-";
+      if (r.chg !== null && r.chg !== undefined) {
+        chgTxt = (r.chg > 0 ? "+" : "") + r.chg.toFixed(0);
+        chgCls = r.chg > 0 ? "up" : (r.chg < 0 ? "down" : "");
       }
-      tds.push(`<td class="${cls}">${r[s] === null ? "-" : Number(r[s]).toLocaleString()}</td>`);
+      const tds = [`<td>${r.contract}</td>`, `<td>${r.close === null ? "-" : r.close.toFixed(0)}</td>`,
+                   `<td class="${chgCls}">${chgTxt}</td>`];
+      seats.forEach(s => {
+        const nc = r[s + "_chg"];
+        let cls = "";
+        if (state.threshold > 0 && nc !== null && nc !== undefined) {
+          if (nc >= state.threshold) cls = "hot-up";
+          else if (nc <= -state.threshold) cls = "hot-down";
+        }
+        tds.push(`<td class="${cls}">${r[s] === null ? "-" : Number(r[s]).toLocaleString()}</td>`);
+      });
+      html += `<tr data-contract='${r.contract}'>` + tds.join("") + "</tr>";
     });
-    return "<tr data-contract='" + r.contract + "'>" + tds.join("") + "</tr>";
-  }).join("");
-  table.innerHTML = head + body;
-  table.querySelectorAll("tr[data-contract]").forEach(tr => {
+    // 分组净持仓合计行：每个席位列 = 该席位在本组全部合约上的净持仓合计
+    const totalTds = ["<td>分组净持仓合计</td>", "<td>-</td>", "<td>-</td>"];
+    seats.forEach(s => {
+      let sum = 0, has = false;
+      rows.forEach(r => {
+        const val = r[s];
+        if (val !== null && val !== undefined) { sum += Number(val); has = true; }
+      });
+      totalTds.push(`<td>${has ? Number(sum).toLocaleString() : "-"}</td>`);
+    });
+    html += `<tr class="total-row">` + totalTds.join("") + "</tr>";
+    html += "</tbody></table>";
+  });
+  area.innerHTML = html;
+  area.querySelectorAll("tr[data-contract]").forEach(tr => {
     tr.addEventListener("click", function () {
-      document.querySelectorAll("#summary tr").forEach(x => x.classList.remove("active"));
+      area.querySelectorAll("tr").forEach(x => x.classList.remove("active"));
       tr.classList.add("active");
       state.contract = tr.getAttribute("data-contract");
       $("contract").value = state.contract;
@@ -492,12 +617,337 @@ function renderTable() {
   });
 }
 
+// ---------- 需求4：席位跨月套利（正套/反套）行为识别 ----------
+const ARBITRAGE_PAIRS = [
+  { key: "15", near: "01", far: "05" },
+  { key: "59", near: "05", far: "09" },
+  { key: "91", near: "09", far: "next01" },
+];
+
+function contractYearMonth(contract) {
+  const m = String(contract || "").match(/(\d{4})$/);
+  if (!m) return null;
+  return { year: parseInt(m[1].slice(0, 2), 10), month: m[1].slice(2) };
+}
+
+function contractByMonth(variety, month) {
+  const pool = DATA.data[variety] || {};
+  let best = null;
+  Object.keys(pool).forEach(c => {
+    const ym = contractYearMonth(c);
+    if (ym && ym.month === month && (!best || ym.year > contractYearMonth(best).year)) best = c;
+  });
+  return best;
+}
+
+function contractNextYear(variety, baseContract, month) {
+  const ym = contractYearMonth(baseContract);
+  if (!ym) return null;
+  const pool = DATA.data[variety] || {};
+  let best = null;
+  Object.keys(pool).forEach(c => {
+    const cym = contractYearMonth(c);
+    if (cym && cym.month === month && cym.year > ym.year) {
+      if (!best || cym.year < contractYearMonth(best).year) best = c;
+    }
+  });
+  return best;
+}
+
+function groupLatest(variety, contract, seats) {
+  const out = { long: 0, short: 0, net: 0, longChange: 0, shortChange: 0, has: false };
+  (seats || []).forEach(s => {
+    const ser = DATA.data[variety] && DATA.data[variety][contract] && DATA.data[variety][contract][s];
+    if (!ser || !ser.long || !ser.long.length) return;
+    out.long += Number(ser.long[ser.long.length - 1]) || 0;
+    out.short += Number(ser.short[ser.short.length - 1]) || 0;
+    out.net += Number(ser.net[ser.net.length - 1]) || 0;
+    out.longChange += Number(ser.long_change[ser.long_change.length - 1]) || 0;
+    out.shortChange += Number(ser.short_change[ser.short_change.length - 1]) || 0;
+    out.has = true;
+  });
+  return out;
+}
+
+function computeArbitrage() {
+  const variety = state.variety;
+  const result = { variety: variety, update_date: DATA.update_date, groups: {} };
+  Object.keys(SEAT_GROUPS).forEach(g => {
+    const seats = SEAT_GROUPS[g].filter(s => state.seats.includes(s));
+    if (!seats.length) return;
+    const c01 = contractByMonth(variety, "01");
+    const c05 = contractByMonth(variety, "05");
+    const c09 = contractByMonth(variety, "09");
+    const c91far = contractNextYear(variety, c09, "01");
+    const pairMap = {
+      "15": { near: c01, far: c05, nearLabel: "01", farLabel: "05" },
+      "59": { near: c05, far: c09, nearLabel: "05", farLabel: "09" },
+      "91": { near: c09, far: c91far, nearLabel: "09", farLabel: "次年01" },
+    };
+    const rows = [];
+    ARBITRAGE_PAIRS.forEach(p => {
+      const pr = pairMap[p.key];
+      const nearData = pr.near ? groupLatest(variety, pr.near, seats) : null;
+      const farData = pr.far ? groupLatest(variety, pr.far, seats) : null;
+      let signal = "无明显跨月套利信号", scale = 0;
+      if (nearData && farData && nearData.has && farData.has) {
+        const nLongC = nearData.longChange, fShortC = farData.shortChange;
+        const nShortC = nearData.shortChange, fLongC = farData.longChange;
+        if (nLongC > 0 && fShortC > 0) { signal = "偏向正套"; scale = Math.min(nLongC, fShortC); }
+        else if (nShortC > 0 && fLongC > 0) { signal = "偏向反套"; scale = Math.min(nShortC, fLongC); }
+      } else if (!pr.near || !pr.far) {
+        signal = "无合约数据";
+      }
+      rows.push({
+        nearLabel: pr.nearLabel, near: pr.near, far: pr.far,
+        long: nearData ? nearData.long : null, short: nearData ? nearData.short : null,
+        net: nearData ? nearData.net : null,
+        longChange: nearData ? nearData.longChange : null, shortChange: nearData ? nearData.shortChange : null,
+        pair: p.key + " 套利", signal: signal, scale: Math.round(scale),
+      });
+    });
+    result.groups[g] = { seats: seats.slice(), rows: rows };
+  });
+  return result;
+}
+
+function renderArbitrage() {
+  const area = $("arbitrage-area");
+  if (!area) return;
+  const result = computeArbitrage();
+  window.arbitrageResult = result; // 预留数据源：供需求5 AI 分析模块读取
+  const gNames = Object.keys(result.groups);
+  if (!gNames.length) {
+    area.innerHTML = '<div class="hint">未勾选任何席位，暂无套利识别数据。</div>';
+    return;
+  }
+  let html = "";
+  gNames.forEach(g => {
+    const grp = result.groups[g];
+    html += '<h4 class="sub">' + g + ' · 跨月套利识别</h4>';
+    html += '<table class="summary arb-table"><thead><tr><th>合约</th><th>多头增/减仓</th><th>空头增/减仓</th><th>套利配对</th><th>套利信号</th><th>规模(手)</th></tr></thead><tbody>';
+    grp.rows.forEach(r => {
+      const changeTxt = v => v === null || v === undefined ? "-"
+        : (v > 0 ? "+" : "") + Number(v).toLocaleString();
+      const changeCls = v => v === null || v === undefined ? "" : (v > 0 ? "up" : (v < 0 ? "down" : ""));
+      const scaleTxt = r.scale > 0 ? Number(r.scale).toLocaleString() : "0";
+      html += '<tr><td>' + r.nearLabel + ' 合约' + (r.near ? '<br><span class="c-code">' + r.near + '</span>' : '') + '</td>'
+        + '<td class="' + changeCls(r.longChange) + '">' + changeTxt(r.longChange) + '</td>'
+        + '<td class="' + changeCls(r.shortChange) + '">' + changeTxt(r.shortChange) + '</td>'
+        + '<td>' + r.pair + '</td><td>' + r.signal + '</td><td>' + scaleTxt + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  });
+  area.innerHTML = html;
+}
+
+// ---------- 需求5：AI 持仓简要分析（后端 app.py 代理转发 DeepSeek） ----------
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function fmtN(v) {
+  return (v === null || v === undefined) ? "-" : Number(v).toLocaleString();
+}
+function fmtSigned(v) {
+  if (v === null || v === undefined) return "-";
+  return (v > 0 ? "+" : "") + Number(v).toLocaleString();
+}
+
+function buildAIPrompt() {
+  const L = [];
+  L.push("你是国内商品期货席位持仓数据分析助手。请基于以下真实统计数据，输出一份结构化的「持仓简要分析」。");
+  L.push("");
+  L.push("===== 一、数据源与筛选状态 =====");
+  L.push(`- 品种：${state.variety}`);
+  L.push(`- 当前合约：${state.contract || "-"}`);
+  L.push(`- 数据更新日期：${DATA.update_date}`);
+  L.push(`- 所选时间周期：${state.range === "all" ? "全部" : state.range + " 个交易日"}`);
+  L.push(`- 已勾选席位（${state.seats.length} 个）：${state.seats.join("、") || "无"}`);
+  L.push(`- 异动阈值（净增减仓手数绝对值）：${state.threshold.toLocaleString()} 手`);
+  L.push(`- 席位分组：量化席位=${SEAT_GROUPS["量化席位"].join("/")}；宏观席位=${SEAT_GROUPS["宏观席位"].join("/")}；重点产业席位=${SEAT_GROUPS["重点产业席位"].join("/")}`);
+
+  const snap = DATA.snapshot[state.variety] || [];
+  const pool = DATA.data[state.variety] || {};
+
+  L.push("");
+  L.push("===== 二、最新交易日快照（收盘价 / 涨跌 / 各席位净持仓(当日净增减仓)） =====");
+  snap.forEach(r => {
+    const cells = [r.contract, r.close === null ? "-" : r.close, r.chg === null ? "-" : fmtSigned(r.chg)];
+    SEATS.forEach(s => {
+      cells.push(r[s] === null ? "-" : fmtN(r[s]) + "(" + fmtSigned(r[s + "_chg"]) + ")");
+    });
+    L.push(cells.join(" | "));
+  });
+
+  L.push("");
+  L.push("===== 三、三组席位汇总（各组在全部合约上的净持仓合计，最新交易日） =====");
+  Object.keys(SEAT_GROUPS).forEach(g => {
+    const seats = SEAT_GROUPS[g];
+    let gsum = 0, ghas = false;
+    snap.forEach(r => seats.forEach(s => { if (r[s] !== null && r[s] !== undefined) { gsum += Number(r[s]); ghas = true; } }));
+    const cells = [g + "合计=" + (ghas ? fmtN(gsum) : "-")];
+    seats.forEach(s => {
+      let sum = 0, has = false;
+      snap.forEach(r => { if (r[s] !== null && r[s] !== undefined) { sum += Number(r[s]); has = true; } });
+      cells.push(s.replace("期货", "") + "=" + (has ? fmtN(sum) : "-"));
+    });
+    L.push(cells.join("；"));
+  });
+
+  L.push("");
+  L.push("===== 四、总持仓量（14 个统计席位多空持仓合计，最新交易日） =====");
+  Object.keys(pool).sort().forEach(c => {
+    let total = 0;
+    Object.keys(pool[c]).forEach(s => {
+      const ser = pool[c][s];
+      if (ser && ser.long && ser.long.length) {
+        total += Number(ser.long[ser.long.length - 1]) + Number(ser.short[ser.short.length - 1]);
+      }
+    });
+    L.push(c + " = " + fmtN(total) + " 手");
+  });
+
+  L.push("");
+  L.push("===== 五、套利板块输出（window.arbitrageResult，基于最新交易日多空增减仓判断） =====");
+  const arb = window.arbitrageResult || null;
+  if (arb && Object.keys(arb.groups || {}).length) {
+    Object.keys(arb.groups).forEach(g => {
+      const grp = arb.groups[g];
+      L.push("[" + g + "] 席位: " + grp.seats.join("、"));
+      (grp.rows || []).forEach(r => {
+        L.push(`  配对 ${r.pair}：近月 ${r.nearLabel}(${r.near || "-"}) 多头${fmtSigned(r.longChange)}/空头${fmtSigned(r.shortChange)}，` +
+               `远月 ${r.farLabel}(${r.far || "-"})，信号=${r.signal}，估算规模=${fmtN(r.scale)}手`);
+      });
+    });
+  } else {
+    L.push("未勾选任何席位，无套利识别数据。");
+  }
+
+  L.push("");
+  L.push("===== 六、所选周期持仓走势摘要（首日→末日） =====");
+  L.push(`周期长度：${state.range === "all" ? "全部" : state.range + " 日"}`);
+  Object.keys(pool).sort().forEach(c => {
+    const seat0 = Object.keys(pool[c])[0];
+    if (!seat0) return;
+    const ser = pool[c][seat0];
+    const n = state.range === "all" ? ser.dates.length : Math.min(Number(state.range), ser.dates.length);
+    const st = ser.dates.length - n;
+    const line = [];
+    Object.keys(pool[c]).forEach(s => {
+      const sd = pool[c][s];
+      line.push(s.replace("期货", "") + ": 净持仓 " + fmtN(sd.net[st]) + "→" + fmtN(sd.net[ser.dates.length - 1]));
+    });
+    L.push(`【${c}】${ser.dates[st]}~${ser.dates[ser.dates.length - 1]} 收盘价 ${ser.close[st]}→${ser.close[ser.dates.length - 1]}；${line.join("；")}`);
+  });
+
+  L.push("");
+  L.push("===== 七、最近 3 个交易日各席位连续增减仓明细（多空/净） =====");
+  Object.keys(pool).sort().forEach(c => {
+    const seat0 = Object.keys(pool[c])[0];
+    if (!seat0) return;
+    const ser = pool[c][seat0];
+    const n3 = Math.min(3, ser.dates.length);
+    L.push(`【${c}】最近 ${n3} 日（${ser.dates.slice(-n3).join(" / ")}）：`);
+    Object.keys(pool[c]).forEach(s => {
+      const sd = pool[c][s];
+      L.push(`  ${s.replace("期货", "")}: 多头增减仓 ${sd.long_change.slice(-n3).map(fmtSigned).join("/")}；` +
+             `空头增减仓 ${sd.short_change.slice(-n3).map(fmtSigned).join("/")}；净增减仓 ${sd.net_change.slice(-n3).map(fmtSigned).join("/")}`);
+    });
+  });
+
+  L.push("");
+  L.push("===== 八、异动清单（最新交易日净增减仓绝对值 ≥ 阈值） =====");
+  let hotCount = 0;
+  snap.forEach(r => {
+    SEATS.forEach(s => {
+      const nc = r[s + "_chg"];
+      if (nc !== null && nc !== undefined && Math.abs(nc) >= state.threshold) {
+        let lc = null, sc = null;
+        const ser = pool[r.contract] && pool[r.contract][s];
+        if (ser && ser.long_change && ser.long_change.length) {
+          lc = ser.long_change[ser.long_change.length - 1];
+          sc = ser.short_change[ser.short_change.length - 1];
+        }
+        L.push(`${r.contract} | ${s} | 净增减仓 ${fmtSigned(nc)} 手（多头 ${fmtSigned(lc)} / 空头 ${fmtSigned(sc)}）`);
+        hotCount++;
+      }
+    });
+  });
+  if (!hotCount) L.push("当前阈值下无异动记录。");
+
+  L.push("");
+  L.push("===== 九、输出要求 =====");
+  L.push("请以几句简洁口语化的持仓行为要点输出（像朋友间聊天一样直接说结论），参考风格：");
+  L.push("「单边行情外资继续加多菜油11月、菜油1月以及豆粕01合约，对棕榈01合约的做空逐步平仓转为做多；宏观席位继续加多油粕；产业席位上建发的华泰做了91反套，中拓的浙商席位在加仓菜粕11-1正套。」");
+  L.push("要求：");
+  L.push("1. 按量化外资/宏观/重点产业三组席位各1-2句，概括多空动作与跨月套利行为，指出显著异动席位；");
+  L.push("2. 不要大标题、不要分节小标题、不要长篇展开、不要罗列数据明细；");
+  L.push("3. 纯文本输出，不要任何 Markdown 标记（如 #、**、*、-、` 等）；");
+  L.push("4. 末尾固定输出一句：「AI 分析仅为数据统计解读，不构成任何投资建议」；");
+  L.push("5. 全文 100-200 字左右，数据引用准确（手数带千分位），不得编造数据源中不存在的数字。");
+  return L.join("\\n");
+}
+
+function stripMarkdown(text) {
+  // 兜底清理：剥离常见 Markdown 符号，确保即使模型仍输出符号也能干净展示
+  return String(text || "")
+    .replace(/^#{1,6}\\s*/gm, "")                 // 行首 # 标题
+    .replace(/^\\s*[\\-\\+\\*]\\s+/gm, "")        // 行首无序列表符（- / + / *）
+    .replace(/^\\s*\\d+[\\.、\\)]\\s+/gm, "")     // 行首有序列表符（1. / 1、 / 1)）
+    .replace(/\\*\\*/g, "")                       // ** 加粗
+    .replace(/\\*/g, "")                          // 单个 *（斜体/星号）
+    .replace(/`+/g, "")                           // 反引号
+    .replace(/^\\s*>\\s?/gm, "")                  // 行首引用 >
+    .replace(/[\\t ]+$/gm, "")                    // 行尾空白
+    .replace(/\\n{3,}/g, "\\n\\n");               // 压缩多余空行
+}
+
+async function runAIAnalysis() {
+  const btn = $("ai-run"), out = $("ai-result");
+  if (!btn || !out) return;
+  btn.disabled = true;
+  btn.textContent = "分析中…";
+  out.innerHTML = '<div class="ai-loading">正在生成 AI 分析，请稍候（最长 ' + Math.round(DEEPSEEK_CONFIG.timeout_ms / 1000) + ' 秒）…</div>';
+  const ctrl = new AbortController();
+  const timer = setTimeout(function () { ctrl.abort(); }, DEEPSEEK_CONFIG.timeout_ms);
+  try {
+    const prompt = buildAIPrompt();
+    const resp = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: prompt }),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      let msg = "HTTP " + resp.status;
+      try { const j = await resp.json(); if (j && j.error) msg += " - " + j.error; } catch (e) {}
+      throw new Error(msg);
+    }
+    const data = await resp.json();
+    const content = data && data.content;
+    if (!content) throw new Error("响应中未包含分析内容");
+    const clean = stripMarkdown(content);
+    out.innerHTML = '<div class="ai-body">' + escapeHtml(clean) + "</div>";
+  } catch (err) {
+    const timedOut = err && err.name === "AbortError";
+    out.innerHTML = '<div class="ai-error">' + (timedOut
+      ? "请求超时（" + Math.round(DEEPSEEK_CONFIG.timeout_ms / 1000) + " 秒），请稍后重试。"
+      : "接口调用失败：" + escapeHtml(String(err && err.message ? err.message : err))) + "</div>";
+  } finally {
+    clearTimeout(timer);
+    btn.disabled = false;
+    btn.textContent = "生成 AI 分析";
+  }
+}
+
 function render() {
   syncContractOptions();
   if (!state.contract) return;
   renderTitle();
   if (state.mode === "A") renderMain(); else renderTiles();
-  renderTable();
+  renderTables();
+  renderArbitrage();
   highlightRange();
 }
 
@@ -519,8 +969,33 @@ function bindEvents() {
     render();
   });
   $("contract").addEventListener("change", e => { state.contract = e.target.value; render(); });
-  $("seat").addEventListener("change", e => { state.seat = e.target.value; render(); });
-  $("drawer-seat").addEventListener("change", e => { state.seat = e.target.value; $("seat").value = state.seat; render(); });
+  $("seat-toggle").addEventListener("click", e => { e.stopPropagation(); $("seat-panel").classList.toggle("open"); });
+  $("drawer-seat-toggle").addEventListener("click", () => $("drawer-seat-panel").classList.toggle("open"));
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".seat-field")) $("seat-panel").classList.remove("open");
+  });
+  document.addEventListener("change", function (e) {
+    if (e.target.classList && e.target.classList.contains("seat-group")) {
+      const g = e.target.getAttribute("data-group");
+      const gseats = SEAT_GROUPS[g] || [];
+      if (e.target.checked) {
+        gseats.forEach(s => { if (!state.seats.includes(s)) state.seats.push(s); });
+      } else {
+        state.seats = state.seats.filter(s => !gseats.includes(s));
+      }
+      renderSeatPanel();
+      render();
+    } else if (e.target.classList && e.target.classList.contains("seat-item")) {
+      const s = e.target.value;
+      if (e.target.checked) {
+        if (!state.seats.includes(s)) state.seats.push(s);
+      } else {
+        state.seats = state.seats.filter(x => x !== s);
+      }
+      renderSeatPanel();
+      render();
+    }
+  });
   document.querySelectorAll("[data-range]").forEach(b => b.addEventListener("click", () => {
     state.range = b.getAttribute("data-range");
     render();
@@ -540,6 +1015,7 @@ function bindEvents() {
     render();
   }));
   $("drawer-toggle").addEventListener("click", () => $("drawer").classList.toggle("open"));
+  $("ai-run").addEventListener("click", runAIAnalysis);
 }
 
 initSelects();
@@ -570,7 +1046,12 @@ def main():
             .replace("__DATA_JSON__", json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
             .replace("__VARIETY_ORDER__", json.dumps(VARIETY_ORDER, ensure_ascii=False))
             .replace("__SEATS__", json.dumps(SEATS, ensure_ascii=False))
-            .replace("__SEAT_COLORS__", json.dumps(SEAT_COLORS, ensure_ascii=False)))
+            .replace("__SEAT_GROUPS__", json.dumps(SEAT_GROUPS, ensure_ascii=False))
+            .replace("__SEAT_COLORS__", json.dumps(SEAT_COLORS, ensure_ascii=False))
+            .replace("__DEEPSEEK_CONFIG__", json.dumps({
+                "model": DEEPSEEK_MODEL,
+                "timeout_ms": DEEPSEEK_TIMEOUT_MS,
+            }, ensure_ascii=False)))
     out = os.path.join(ROOT_DIR, "dashboard.html")
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
