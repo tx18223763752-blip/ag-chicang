@@ -275,6 +275,23 @@ __PLOTLY_JS__
   #ai-result .ai-tag-z { background: #F0E7DB; color: #8A5A2B; }
   #ai-result .ai-text { font-size: 13px; color: #2B2F36; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
   #ai-result .ai-para { font-size: 13px; color: #2B2F36; line-height: 1.7; padding: 2px 2px; }
+  /* 豆粕/棕榈油 持仓-价格关系分析板块：复用 AI 卡片风格 */
+  #mpReport { margin-top: 4px; }
+  #mpReport .ai-loading { color: #666; font-size: 13px; padding: 14px 12px; border: 1px dashed #C5CBD3; border-radius: 6px; background: #FAFBFC; }
+  #mpReport .ai-error { color: #C62828; font-size: 13px; padding: 12px; border: 1px solid #FFCDD2; border-radius: 6px; background: #FFEBEE; white-space: pre-wrap; }
+  #mpReport .ai-body { font-size: 13px; line-height: 1.7; padding: 14px 16px; border: 1px solid #E3E7EC; border-radius: 6px; background: #FBFCFE; white-space: pre-wrap; word-break: break-word; }
+  #mpReport .ai-cards { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #F2F6FF; border: 1px solid #D8E4F8; border-radius: 12px; }
+  #mpReport .ai-card { background: #FFFFFF; border: 1px solid #E4EBFA; border-radius: 10px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(40, 70, 140, 0.06); }
+  #mpReport .ai-tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; margin-bottom: 6px; }
+  #mpReport .ai-tag-q { background: #E3EDFF; color: #2B5CD9; }
+  #mpReport .ai-tag-h { background: #EFE6FF; color: #7A3FD0; }
+  #mpReport .ai-tag-c { background: #E0F4F0; color: #0E8A70; }
+  #mpReport .ai-text { font-size: 13px; color: #2B2F36; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+  #mpReport .mp-section { margin-bottom: 14px; }
+  #mpReport .mp-section .sub { margin: 0 0 8px; font-size: 14px; color: #1B3F8F; }
+  #mpReport .mp-list { margin: 2px 0 2px; padding-left: 18px; }
+  #mpReport .mp-list li { font-size: 13px; color: #2B2F36; line-height: 1.7; margin-bottom: 2px; }
+  #mpReport .mp-risk { color: #C62828; font-weight: bold; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -355,6 +372,17 @@ __PLOTLY_JS__
       <span class="hint" style="margin:0">基于当前筛选状态（品种 / 合约 / 席位 / 周期 / 异动阈值）调用 DeepSeek 生成。</span>
     </div>
     <div id="ai-result"></div>
+    <div class="hint ai-risk">AI 分析仅为数据统计解读，不构成任何投资建议</div>
+  </div>
+
+  <div class="ai-block" id="mp-block">
+    <h3>豆粕 / 棕榈油 持仓-价格关系分析</h3>
+    <div class="ai-head">
+      <button class="btn primary" id="mp-run">豆粕棕榈油持仓价格分析</button>
+      <button class="btn" id="mp-export" disabled>导出为图片</button>
+      <span class="hint" style="margin:0">固定分析豆粕、棕榈油主力合约（自动识别总持仓量最大合约），解读各席位持仓变动与价格变化的对应关系。</span>
+    </div>
+    <div id="mpReport"></div>
     <div class="hint ai-risk">AI 分析仅为数据统计解读，不构成任何投资建议</div>
   </div>
 
@@ -683,23 +711,23 @@ function groupLatest(variety, contract, seats) {
 function computeArbitrage() {
   const variety = state.variety;
   const result = { variety: variety, update_date: DATA.update_date, groups: {} };
-  Object.keys(SEAT_GROUPS).forEach(g => {
-    const seats = SEAT_GROUPS[g].filter(s => state.seats.includes(s));
-    if (!seats.length) return;
-    const c01 = contractByMonth(variety, "01");
-    const c05 = contractByMonth(variety, "05");
-    const c09 = contractByMonth(variety, "09");
-    const c91far = contractNextYear(variety, c09, "01");
-    const pairMap = {
-      "15": { near: c01, far: c05, nearLabel: "01", farLabel: "05" },
-      "59": { near: c05, far: c09, nearLabel: "05", farLabel: "09" },
-      "91": { near: c09, far: c91far, nearLabel: "09", farLabel: "次年01" },
-    };
+  const seats = state.seats.slice();
+  if (!seats.length) return result;
+  const c01 = contractByMonth(variety, "01");
+  const c05 = contractByMonth(variety, "05");
+  const c09 = contractByMonth(variety, "09");
+  const c91far = contractNextYear(variety, c09, "01");
+  const pairMap = {
+    "15": { near: c01, far: c05, nearLabel: "01", farLabel: "05" },
+    "59": { near: c05, far: c09, nearLabel: "05", farLabel: "09" },
+    "91": { near: c09, far: c91far, nearLabel: "09", farLabel: "次年01" },
+  };
+  seats.forEach(s => {
     const rows = [];
     ARBITRAGE_PAIRS.forEach(p => {
       const pr = pairMap[p.key];
-      const nearData = pr.near ? groupLatest(variety, pr.near, seats) : null;
-      const farData = pr.far ? groupLatest(variety, pr.far, seats) : null;
+      const nearData = pr.near ? groupLatest(variety, pr.near, [s]) : null;
+      const farData = pr.far ? groupLatest(variety, pr.far, [s]) : null;
       let signal = "无明显跨月套利信号", scale = 0;
       if (nearData && farData && nearData.has && farData.has) {
         const nLongC = nearData.longChange, fShortC = farData.shortChange;
@@ -717,7 +745,7 @@ function computeArbitrage() {
         pair: p.key + " 套利", signal: signal, scale: Math.round(scale),
       });
     });
-    result.groups[g] = { seats: seats.slice(), rows: rows };
+    result.groups[s] = { seats: [s], rows: rows };
   });
   return result;
 }
@@ -727,15 +755,17 @@ function renderArbitrage() {
   if (!area) return;
   const result = computeArbitrage();
   window.arbitrageResult = result; // 预留数据源：供需求5 AI 分析模块读取
-  const gNames = Object.keys(result.groups);
-  if (!gNames.length) {
+  const names = Object.keys(result.groups);
+  if (!names.length) {
     area.innerHTML = '<div class="hint">未勾选任何席位，暂无套利识别数据。</div>';
     return;
   }
   let html = "";
-  gNames.forEach(g => {
-    const grp = result.groups[g];
-    html += '<h4 class="sub">' + g + ' · 跨月套利识别</h4>';
+  names.forEach(s => {
+    const grp = result.groups[s];
+    html += '<h4 class="sub">' + s + ' · 跨月套利识别</h4>';
+    const anyData = grp.rows.some(r => r.longChange !== null || r.shortChange !== null);
+    if (!anyData) { html += '<div class="hint">该席位在当前品种暂无持仓数据。</div>'; return; }
     html += '<table class="summary arb-table"><thead><tr><th>合约</th><th>多头增/减仓</th><th>空头增/减仓</th><th>套利配对</th><th>套利信号</th><th>规模(手)</th></tr></thead><tbody>';
     grp.rows.forEach(r => {
       const changeTxt = v => v === null || v === undefined ? "-"
@@ -980,6 +1010,201 @@ function renderAIResult(text) {
   return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
 }
 
+const MP_VARIETIES = ["豆粕", "棕榈油"];
+
+function seatTotalOI(variety, contract, seat) {
+  const ser = DATA.data[variety] && DATA.data[variety][contract] && DATA.data[variety][contract][seat];
+  if (!ser || !ser.long || !ser.long.length) return 0;
+  return (Number(ser.long[ser.long.length - 1]) || 0) + (Number(ser.short[ser.short.length - 1]) || 0);
+}
+
+function contractTotalOI(variety, contract) {
+  let total = 0;
+  SEATS.forEach(s => { total += seatTotalOI(variety, contract, s); });
+  return total;
+}
+
+function pickMainContract(variety) {
+  const contracts = contractsOf(variety);
+  if (!contracts.length) return null;
+  let best = null, bestOI = -1;
+  contracts.forEach(c => {
+    const oi = contractTotalOI(variety, c);
+    if (oi > bestOI) { bestOI = oi; best = c; }
+  });
+  if (bestOI <= 0) best = contracts[contracts.length - 1]; // 无持仓量数据：最近月份合约兜底
+  return { contract: best, totalOI: bestOI > 0 ? bestOI : 0 };
+}
+
+function buildMPPrompt() {
+  const L = [];
+  L.push("你是国内商品期货席位持仓数据分析助手。请分析豆粕、棕榈油两个品种的主力合约：各主要席位最近3日多空持仓变动、持仓变动与价格变化的对应关系，并给出多空倾向与价格驱动判断。");
+  L.push("");
+  window.__mpMeta = {};
+  MP_VARIETIES.forEach(v => {
+    const mc = pickMainContract(v);
+    if (!mc) {
+      L.push("【" + v + "】当前数据源中无可用合约数据，基于可得数据分析。");
+      window.__mpMeta[v] = { contract: null, totalOI: 0 };
+      return;
+    }
+    const pool = DATA.data[v] || {};
+    const snap = DATA.snapshot[v] || [];
+    const ser = pool[mc.contract];
+    const snapRow = snap.find(r => r.contract === mc.contract);
+    const n3 = ser ? Math.min(3, ser.dates.length) : 0;
+    window.__mpMeta[v] = { contract: mc.contract, totalOI: mc.totalOI };
+    L.push("===== 【" + v + "】主力合约：" + mc.contract + "（总持仓量 " + fmtN(mc.totalOI) + " 手） =====");
+    L.push("最近收盘价：" + (snapRow && snapRow.close != null ? snapRow.close : "-") +
+           "；涨跌：" + (snapRow && snapRow.chg != null ? fmtSigned(snapRow.chg) : "-") +
+           "；最近3个交易日：" + (ser ? ser.dates.slice(-n3).join(" / ") : "-") +
+           "；3日收盘价序列：" + (ser ? ser.close.slice(-n3).join(" → ") : "-") + "。");
+    L.push("各主要席位最近3日多头/空头增减仓（手，按日期先后顺序）：");
+    SEATS.forEach(s => {
+      const sd = pool[mc.contract] && pool[mc.contract][s];
+      if (!sd || !sd.long_change || !sd.long_change.length) { L.push("  " + s + "：无数据"); return; }
+      L.push("  " + s.replace("期货", "") + "：多头增减仓 " + sd.long_change.slice(-n3).map(fmtSigned).join("/") +
+             "；空头增减仓 " + sd.short_change.slice(-n3).map(fmtSigned).join("/"));
+    });
+    L.push("");
+  });
+  L.push("===== 输出要求 =====");
+  L.push("请按行输出结构化分析，直接说结论，口语化，禁止任何 Markdown 标记（#、**、*、-、` 等）。");
+  L.push("1. 每个品种用三个固定标签行开头，格式为：【豆粕·持仓变动】【豆粕·价格关系】【豆粕·结论】；棕榈油同理为【棕榈油·持仓变动】【棕榈油·价格关系】【棕榈油·结论】；");
+  L.push("2. 【XX·持仓变动】：1-3 行要点，概述该品种主要席位（重点提增减仓显著的席位及手数）最近3日多头/空头增减仓动向；");
+  L.push("3. 【XX·价格关系】：1-3 行要点，将各席位持仓变动与收盘价变化对照，分析多空增减仓与价格走势的对应关系（如增仓上行、减仓回落、量价背离等）；");
+  L.push("4. 【XX·结论】：1-2 行，给出该品种多空倾向与价格驱动判断；");
+  L.push("5. 全文约 250-400 字；除上述 6 个标签行和末尾风险提示外，不要输出任何其它标题或分节；");
+  L.push("6. 最后单独输出一行风险提示：「AI 分析仅为数据统计解读，不构成任何投资建议」（此行不带标签）；");
+  L.push("7. 数据引用准确（手数带千分位），数据源缺失时基于可得数据分析，不得编造数据源中不存在的数字。");
+  return L.join("\\n");
+}
+
+function renderMPReport(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return '<div class="ai-body"></div>';
+  const clean = stripMarkdown(raw);
+  const lines = clean.split("\\n").map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
+  if (!lines.length) return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
+  const re = /^【(豆粕|棕榈油)[·:：\\s]*(持仓变动|价格关系|结论)】/;
+  const map = {}, meta = window.__mpMeta || {};
+  let risk = "";
+  lines.forEach(function (line) {
+    const m = line.match(re);
+    if (m) {
+      const k = m[1] + "|" + m[2];
+      (map[k] = map[k] || []).push(line.slice(m[0].length).trim());
+    } else if (line.indexOf("不构成任何投资建议") >= 0) {
+      risk = line;
+    }
+  });
+  const tagCls = { "持仓变动": "q", "价格关系": "h", "结论": "c" };
+  let html = "";
+  MP_VARIETIES.forEach(function (v) {
+    const hasAny = ["持仓变动", "价格关系", "结论"].some(function (t) { return (map[v + "|" + t] || []).length; });
+    if (!hasAny) return;
+    const m = meta[v];
+    html += '<div class="mp-section"><h4 class="sub">' + v + (m && m.contract ? " · 主力合约 " + m.contract : "") + "</h4>";
+    html += '<div class="ai-cards">';
+    ["持仓变动", "价格关系", "结论"].forEach(function (t) {
+      const ls = map[v + "|" + t] || [];
+      if (!ls.length) return;
+      html += '<div class="ai-card"><span class="ai-tag ai-tag-' + (tagCls[t] || "x") + '">' + t + "</span>";
+      if (t === "结论") {
+        html += '<div class="ai-text">' + ls.map(function (l) { return escapeHtml(l); }).join("<br>") + "</div>";
+      } else {
+        html += '<ul class="mp-list">' + ls.map(function (l) { return "<li>" + escapeHtml(l) + "</li>"; }).join("") + "</ul>";
+      }
+      html += "</div>";
+    });
+    html += "</div></div>";
+  });
+  if (!html) return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
+  if (risk) html += '<div class="mp-risk">' + escapeHtml(risk) + "</div>";
+  return html;
+}
+
+async function runMPAnalysis() {
+  const btn = $("mp-run"), out = $("mpReport"), exp = $("mp-export");
+  if (!btn || !out) return;
+  btn.disabled = true;
+  btn.textContent = "分析中…";
+  out.innerHTML = '<div class="ai-loading">正在生成豆粕/棕榈油持仓-价格分析，请稍候（最长 ' + Math.round(DEEPSEEK_CONFIG.timeout_ms / 1000) + ' 秒）…</div>';
+  const ctrl = new AbortController();
+  const timer = setTimeout(function () { ctrl.abort(); }, DEEPSEEK_CONFIG.timeout_ms);
+  try {
+    const prompt = buildMPPrompt();
+    const resp = await fetch("/api/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: prompt }),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      let msg = "HTTP " + resp.status;
+      try { const j = await resp.json(); if (j && j.error) msg += " - " + j.error; } catch (e) {}
+      throw new Error(msg);
+    }
+    const data = await resp.json();
+    const content = data && data.content;
+    if (!content) throw new Error("响应中未包含分析内容");
+    out.innerHTML = renderMPReport(stripMarkdown(content));
+    if (exp) exp.disabled = false;
+  } catch (err) {
+    const timedOut = err && err.name === "AbortError";
+    out.innerHTML = '<div class="ai-error">' + (timedOut
+      ? "请求超时（" + Math.round(DEEPSEEK_CONFIG.timeout_ms / 1000) + " 秒），请稍后重试。"
+      : "接口调用失败：" + escapeHtml(String(err && err.message ? err.message : err))) + "</div>";
+  } finally {
+    clearTimeout(timer);
+    btn.disabled = false;
+    btn.textContent = "豆粕棕榈油持仓价格分析";
+  }
+}
+
+function loadHtml2canvas() {
+  return new Promise(function (resolve, reject) {
+    if (typeof html2canvas !== "undefined") { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+    s.onload = resolve;
+    s.onerror = function () { reject(new Error("截图库加载失败")); };
+    document.head.appendChild(s);
+  });
+}
+
+async function exportMPImage() {
+  const node = $("mpReport"), btn = $("mp-export");
+  if (!node || !node.innerHTML.trim()) {
+    alert("请先生成分析报告再导出图片。");
+    return;
+  }
+  try {
+    await loadHtml2canvas();
+  } catch (e) {
+    alert("导出图片需要联网加载 html2canvas 截图库，当前加载失败，请检查网络后重试。");
+    return;
+  }
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = "导出中…";
+  try {
+    const canvas = await html2canvas(node, { backgroundColor: "#FFFFFF", scale: 2, useCORS: true });
+    const a = document.createElement("a");
+    const d = new Date();
+    a.download = "mp_report_" + d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + ".png";
+    a.href = canvas.toDataURL("image/png");
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch (err) {
+    alert("导出图片失败：" + escapeHtml(String(err && err.message ? err.message : err)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "导出为图片";
+  }
+}
+
 async function runAIAnalysis() {
   const btn = $("ai-run"), out = $("ai-result");
   if (!btn || !out) return;
@@ -1093,6 +1318,8 @@ function bindEvents() {
   }));
   $("drawer-toggle").addEventListener("click", () => $("drawer").classList.toggle("open"));
   $("ai-run").addEventListener("click", runAIAnalysis);
+  $("mp-run").addEventListener("click", runMPAnalysis);
+  $("mp-export").addEventListener("click", exportMPImage);
 }
 
 initSelects();
@@ -1100,6 +1327,7 @@ syncContractOptions();
 bindEvents();
 render();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
 </html>
 """
