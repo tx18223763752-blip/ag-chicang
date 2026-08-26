@@ -88,12 +88,34 @@ def fetch_position(contract, market, date_str):
     return data
 
 
+def probe_contracts():
+    """动态生成当前活跃的探测合约（多品种 × 最近未到期的2个月份），
+    避免单一合约临近交割停更导致误判交易日"""
+    today = datetime.date.today()
+    cands = []
+    for code, market in [("m", "114"), ("y", "114"), ("OI", "115"), ("RM", "115")]:
+        months = []
+        for m in ALL_MONTHS:
+            year = today.year
+            if (year, m) < (today.year, today.month):
+                year += 1
+            months.append((year, m))
+        months.sort()
+        for year, m in months[:2]:
+            cands.append(("{}{:02d}{:02d}".format(code, year % 100, m), market))
+    return cands
+
+
 def probe_has_data(date_str):
-    """探测某交易日是否有持仓数据：用豆油 y2609 合约探测"""
-    try:
-        return fetch_position("y2609", "114", date_str) is not None
-    except Exception:
-        return False
+    """探测某交易日是否有持仓数据：多个活跃合约任一命中即认为有数据。
+    单一合约可能因临近交割而提前停更（如 y2609 停在 8-24），会导致误判"""
+    for contract, market in probe_contracts():
+        try:
+            if fetch_position(contract, market, date_str) is not None:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def collect_trade_dates(end_date, n=None, start_date=None):
@@ -134,8 +156,19 @@ def seat_match(full_name):
     return None
 
 
+def contract_exists(contract, market, anchor):
+    """合约是否在数据源中存在：返回持仓列表即认为存在。
+    不要求 tradeDate==anchor，临近交割合约可能已停更但仍有效（如 y2609 停在 8-24）"""
+    j = api_get("getLongAndShortPosition",
+                {"date": anchor.strftime("%Y%m%d"), "contract": contract, "market": market})
+    if j.get("code") != 10000:
+        return False
+    data = j.get("data") or {}
+    return bool(data.get("longInfoList"))
+
+
 def fixed_contracts(code, market, months, today):
-    """按月份生成目标合约（最近未到期）"""
+    """按月份生成目标合约（最近未到期，以合约存在性为准而非当日有数据）"""
     result = []
     for m in months:
         year = today.year
@@ -143,7 +176,7 @@ def fixed_contracts(code, market, months, today):
             year += 1
         for _ in range(3):
             contract = "{}{:02d}{:02d}".format(code, year % 100, m)
-            if fetch_position(contract, market, today.strftime("%Y%m%d")) is not None:
+            if contract_exists(contract, market, today):
                 result.append((contract, "{:02d}".format(m)))
                 break
             year += 1
