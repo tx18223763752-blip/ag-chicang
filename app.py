@@ -30,7 +30,7 @@ app = Flask(__name__, static_folder=None)
 API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
 BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip().rstrip("/")
 MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash").strip()
-TIMEOUT = float(os.environ.get("DEEPSEEK_TIMEOUT", "60"))
+TIMEOUT = float(os.environ.get("DEEPSEEK_TIMEOUT", "180"))
 PORT = int(os.environ.get("PORT", "8000"))
 
 
@@ -76,7 +76,7 @@ def ai_proxy():
         "Authorization": "Bearer " + API_KEY,
     }
     try:
-        resp = requests.post(BASE_URL + "/chat/completions", headers=headers, json=payload, timeout=TIMEOUT)
+        resp = requests.post(BASE_URL + "/chat/completions", headers=headers, json=payload, timeout=(10, TIMEOUT))
     except requests.RequestException as exc:
         return jsonify({"error": "DeepSeek 请求失败: " + str(exc)}), 502
 
