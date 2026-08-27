@@ -4131,7 +4131,7 @@ const VARIETY_ORDER = ["豆油", "棕榈油", "菜油", "菜粕", "豆粕"];
 const SEATS = ["摩根大通期货", "瑞银期货", "高盛期货", "东证期货", "海通期货", "中信期货", "国泰君安期货", "中粮期货", "华泰期货", "国投安信期货", "瑞达期货", "五矿期货", "广发期货", "一德期货"];
 const SEAT_GROUPS = {"量化席位": ["摩根大通期货", "瑞银期货", "高盛期货", "东证期货", "海通期货"], "宏观席位": ["中信期货", "国泰君安期货"], "重点产业席位": ["中粮期货", "华泰期货", "国投安信期货", "瑞达期货", "五矿期货", "广发期货", "一德期货"]};
 const SEAT_COLORS = {"摩根大通期货": "#E53935", "瑞银期货": "#FDD835", "高盛期货": "#C0CA33", "东证期货": "#8E24AA", "海通期货": "#00ACC1", "中信期货": "#FB8C00", "国泰君安期货": "#1E88E5", "中粮期货": "#43A047", "华泰期货": "#5E35B1", "国投安信期货": "#6D4C41", "瑞达期货": "#D81B60", "五矿期货": "#3949AB", "广发期货": "#00897B", "一德期货": "#F4511E"};
-const DEEPSEEK_CONFIG = {"model": "deepseek-v4-flash", "timeout_ms": 60000};
+const DEEPSEEK_CONFIG = {"model": "deepseek-v4-flash", "timeout_ms": 60000, "mp_timeout_ms": 180000};
 const MAX_TILES = 14;
 
 const state = {
@@ -4175,8 +4175,12 @@ function syncContractOptions() {
   const list = contractsOf(state.variety);
   const cSel = $("contract");
   cSel.innerHTML = list.map(c => `<option value="${c}">${c}</option>`).join("");
-  if (!list.includes(state.contract)) state.contract = list[0] || null;
-  else cSel.value = state.contract;
+  if (!list.includes(state.contract)) {
+    const mc = pickMainContract(state.variety);
+    state.contract = (mc && list.includes(mc.contract)) ? mc.contract : (list[0] || null);
+  } else {
+    cSel.value = state.contract;
+  }
 }
 
 function sliceSeries(ser) {
@@ -4728,8 +4732,10 @@ const MP_VARIETIES = ["豆粕", "棕榈油"];
 
 function seatTotalOI(variety, contract, seat) {
   const ser = DATA.data[variety] && DATA.data[variety][contract] && DATA.data[variety][contract][seat];
-  if (!ser || !ser.long || !ser.long.length) return 0;
-  return (Number(ser.long[ser.long.length - 1]) || 0) + (Number(ser.short[ser.short.length - 1]) || 0);
+  if (!ser) return 0;
+  const l = ser.long && ser.long.length ? (Number(ser.long[ser.long.length - 1]) || 0) : 0;
+  const sh = ser.short && ser.short.length ? (Number(ser.short[ser.short.length - 1]) || 0) : 0;
+  return l + sh;
 }
 
 function contractTotalOI(variety, contract) {
@@ -4762,23 +4768,34 @@ function buildMPPrompt() {
       window.__mpMeta[v] = { contract: null, totalOI: 0 };
       return;
     }
-    const pool = DATA.data[v] || {};
-    const snap = DATA.snapshot[v] || [];
-    const ser = pool[mc.contract];
-    const snapRow = snap.find(r => r.contract === mc.contract);
-    const n3 = ser ? Math.min(3, ser.dates.length) : 0;
+    const pool = (DATA.data || {})[v] || {};
+    const snap = (DATA.snapshot || {})[v] || [];
+    const ser = pool[mc.contract] || {};
+    const snapRow = snap.find(r => r.contract === mc.contract) || null;
+    const dates = Array.isArray(ser.dates) ? ser.dates : [];
+    const closes = Array.isArray(ser.close) ? ser.close : [];
+    const n3 = Math.min(3, dates.length);
     window.__mpMeta[v] = { contract: mc.contract, totalOI: mc.totalOI };
     L.push("===== 【" + v + "】主力合约：" + mc.contract + "（总持仓量 " + fmtN(mc.totalOI) + " 手） =====");
     L.push("最近收盘价：" + (snapRow && snapRow.close != null ? snapRow.close : "-") +
            "；涨跌：" + (snapRow && snapRow.chg != null ? fmtSigned(snapRow.chg) : "-") +
-           "；最近3个交易日：" + (ser ? ser.dates.slice(-n3).join(" / ") : "-") +
-           "；3日收盘价序列：" + (ser ? ser.close.slice(-n3).join(" → ") : "-") + "。");
-    L.push("各主要席位最近3日多头/空头增减仓（手，按日期先后顺序）：");
+           "；最近3个交易日：" + (dates.length ? dates.slice(-n3).join(" / ") : "-") +
+           "；3日收盘价序列：" + (closes.length ? closes.slice(-n3).join(" → ") : "-") + "。");
+    if (!dates.length && !closes.length) {
+      L.push(Object.keys(ser).length
+        ? "（该品种暂无价格序列数据，以下仅基于席位持仓数据分析）"
+        : "（该品种暂无可用持仓/价格数据，以下基于可得数据分析）");
+    }
+    L.push("各主要席位最近3日多头/空头净增减仓（手，正=增仓，负=减仓）：");
     SEATS.forEach(s => {
-      const sd = pool[mc.contract] && pool[mc.contract][s];
-      if (!sd || !sd.long_change || !sd.long_change.length) { L.push("  " + s + "：无数据"); return; }
-      L.push("  " + s.replace("期货", "") + "：多头增减仓 " + sd.long_change.slice(-n3).map(fmtSigned).join("/") +
-             "；空头增减仓 " + sd.short_change.slice(-n3).map(fmtSigned).join("/"));
+      const sd = (pool[mc.contract] && pool[mc.contract][s]) || null;
+      const lc = sd && Array.isArray(sd.long_change) ? sd.long_change : [];
+      const sc = sd && Array.isArray(sd.short_change) ? sd.short_change : [];
+      if (!lc.length && !sc.length) { L.push("  " + s + "：无数据"); return; }
+      const lnet = lc.slice(-n3).reduce((a, b) => a + (Number(b) || 0), 0);
+      const snet = sc.slice(-n3).reduce((a, b) => a + (Number(b) || 0), 0);
+      L.push("  " + s.replace("期货", "") + "：多头净增减 " + (lc.length ? fmtSigned(lnet) : "无") +
+             "；空头净增减 " + (sc.length ? fmtSigned(snet) : "无"));
     });
     L.push("");
   });
@@ -4796,44 +4813,60 @@ function buildMPPrompt() {
 
 function renderMPReport(text) {
   const raw = String(text || "").trim();
-  if (!raw) return '<div class="ai-body"></div>';
+  if (!raw) return '<div class="ai-empty">AI 未返回分析内容，请稍后重试。</div>';
   const clean = stripMarkdown(raw);
   const lines = clean.split("\n").map(function (s) { return s.trim(); }).filter(function (s) { return s.length > 0; });
-  if (!lines.length) return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
   const re = /^【(豆粕|棕榈油)[·:：\s]*(持仓变动|价格关系|结论)】/;
   const map = {}, meta = window.__mpMeta || {};
-  let risk = "";
+  const extras = [];
+  let risk = "", cur = null;
   lines.forEach(function (line) {
     const m = line.match(re);
     if (m) {
       const k = m[1] + "|" + m[2];
-      (map[k] = map[k] || []).push(line.slice(m[0].length).trim());
-    } else if (line.indexOf("不构成任何投资建议") >= 0) {
-      risk = line;
+      cur = k;
+      if (!map[k]) map[k] = [];
+      const body = line.slice(m[0].length).trim();
+      if (body) map[k].push(body);
+      return;
     }
+    if (line.indexOf("不构成任何投资建议") >= 0) { risk = line; return; }
+    if (cur && map[cur]) { map[cur].push(line); return; }
+    extras.push(line);
   });
   const tagCls = { "持仓变动": "q", "价格关系": "h", "结论": "c" };
   let html = "";
   MP_VARIETIES.forEach(function (v) {
-    const hasAny = ["持仓变动", "价格关系", "结论"].some(function (t) { return (map[v + "|" + t] || []).length; });
+    const groups = ["持仓变动", "价格关系", "结论"].map(function (t) {
+      return { t: t, ls: (map[v + "|" + t] || []).filter(function (s) { return s.length > 0; }) };
+    });
+    const hasAny = groups.some(function (g) { return g.ls.length > 0; });
     if (!hasAny) return;
     const m = meta[v];
     html += '<div class="mp-section"><h4 class="sub">' + v + (m && m.contract ? " · 主力合约 " + m.contract : "") + "</h4>";
     html += '<div class="ai-cards">';
-    ["持仓变动", "价格关系", "结论"].forEach(function (t) {
-      const ls = map[v + "|" + t] || [];
-      if (!ls.length) return;
-      html += '<div class="ai-card"><span class="ai-tag ai-tag-' + (tagCls[t] || "x") + '">' + t + "</span>";
-      if (t === "结论") {
-        html += '<div class="ai-text">' + ls.map(function (l) { return escapeHtml(l); }).join("<br>") + "</div>";
+    groups.forEach(function (g) {
+      if (!g.ls.length) return;
+      html += '<div class="ai-card"><span class="ai-tag ai-tag-' + (tagCls[g.t] || "x") + '">' + g.t + "</span>";
+      if (g.t === "结论") {
+        html += '<div class="ai-text">' + g.ls.map(function (l) { return escapeHtml(l); }).join("<br>") + "</div>";
       } else {
-        html += '<ul class="mp-list">' + ls.map(function (l) { return "<li>" + escapeHtml(l) + "</li>"; }).join("") + "</ul>";
+        html += '<ul class="mp-list">' + g.ls.map(function (l) { return "<li>" + escapeHtml(l) + "</li>"; }).join("") + "</ul>";
       }
       html += "</div>";
     });
     html += "</div></div>";
   });
-  if (!html) return '<div class="ai-body">' + escapeHtml(clean) + "</div>";
+  if (!html) {
+    const fallback = [].concat(extras, ["持仓变动", "价格关系", "结论"].reduce(function (a, t) {
+      return a.concat(map["豆粕|" + t] || [], map["棕榈油|" + t] || []);
+    }, [])).filter(function (s) { return s && s.length > 0; }).map(function (s) { return escapeHtml(s); }).join("<br>");
+    let msg = '<div class="ai-empty">AI 未返回有效的结构化要点，未识别到【豆粕/棕榈油·持仓变动/价格关系/结论】标签内容，请稍后重试。</div>';
+    if (fallback) msg += '<div class="ai-body">' + fallback + "</div>";
+    if (risk) msg += '<div class="mp-risk">' + escapeHtml(risk) + "</div>";
+    return msg;
+  }
+  if (extras.length) html += '<div class="ai-para">' + extras.map(function (s) { return escapeHtml(s); }).join("<br>") + "</div>";
   if (risk) html += '<div class="mp-risk">' + escapeHtml(risk) + "</div>";
   return html;
 }
@@ -4843,9 +4876,10 @@ async function runMPAnalysis() {
   if (!btn || !out) return;
   btn.disabled = true;
   btn.textContent = "分析中…";
-  out.innerHTML = '<div class="ai-loading">正在生成豆粕/棕榈油持仓-价格分析，请稍候（最长 ' + Math.round(DEEPSEEK_CONFIG.timeout_ms / 1000) + ' 秒）…</div>';
+  const mpTimeout = DEEPSEEK_CONFIG.mp_timeout_ms || DEEPSEEK_CONFIG.timeout_ms;
+  out.innerHTML = '<div class="ai-loading">正在生成豆粕/棕榈油持仓-价格分析，数据较多，约需 1~2 分钟，请稍候…</div>';
   const ctrl = new AbortController();
-  const timer = setTimeout(function () { ctrl.abort(); }, DEEPSEEK_CONFIG.timeout_ms);
+  const timer = setTimeout(function () { ctrl.abort(); }, mpTimeout);
   try {
     const prompt = buildMPPrompt();
     const resp = await fetch("/api/ai", {
@@ -4861,13 +4895,12 @@ async function runMPAnalysis() {
     }
     const data = await resp.json();
     const content = data && data.content;
-    if (!content) throw new Error("响应中未包含分析内容");
-    out.innerHTML = renderMPReport(stripMarkdown(content));
+    out.innerHTML = renderMPReport(content);
     if (exp) exp.disabled = false;
   } catch (err) {
     const timedOut = err && err.name === "AbortError";
     out.innerHTML = '<div class="ai-error">' + (timedOut
-      ? "请求超时（" + Math.round(DEEPSEEK_CONFIG.timeout_ms / 1000) + " 秒），请稍后重试。"
+      ? "分析数据较多，请求超时（约 2 分钟），请稍后重试。"
       : "接口调用失败：" + escapeHtml(String(err && err.message ? err.message : err))) + "</div>";
   } finally {
     clearTimeout(timer);
