@@ -1,33 +1,28 @@
 name: Update Dashboard
-
 on:
-  # 工作日北京时间 22:30 自动更新（UTC 14:30），期货持仓数据晚间更新完毕后抓取
+  # 工作日北京时间 16:30 / 17:30 / 20:00 自动更新（分别对应 UTC 08:30 / 09:30 / 12:00）
   schedule:
-    - cron: '30 14 * * 1-5'
+    - cron: '30 8 * * 1-5'
+    - cron: '30 9 * * 1-5'
+    - cron: '0 12 * * 1-5'
   # 支持在 GitHub Actions 页面手动触发
   workflow_dispatch:
-
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install dependencies
         run: pip install -r requirements.txt
-
       - name: Fetch data & generate dashboard
         run: python run_all.py
-
       - name: Publish as index.html
         run: cp dashboard.html index.html
-
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
